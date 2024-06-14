@@ -1,48 +1,110 @@
 package controllers
 
 import (
-	"net/http"
+	"ar/model"
+	"math"
+	"time"
 )
 
-// OptionsContract represents the data structure of an options contract
-type OptionsContract struct {
-	// Your code here
+func AnalyzeOptionsContracts(contracts []model.OptionsContract) (model.AnalysisResult, error) {
+
+	// Validate options contracts
+	if err := validateOptionsContracts(contracts); err != nil {
+		return model.AnalysisResult{}, err
+	}
+
+	var xValues []model.XYValue
+	var maxProfit float64 = math.Inf(-1)
+	var maxLoss float64 = math.Inf(1)
+	var breakEvenPoints []float64
+
+	// Loop through a range of possible underlying prices
+	for price := 0.0; price <= 1000.0; price += 1 {
+		totalProfitLoss := 0.0
+		for _, contract := range contracts {
+			// Calculate profit or loss for each contract at this price
+			var profitOrLoss float64
+			if contract.Type == model.CallOptionType {
+				if price > contract.StrikePrice {
+					// Profit = (Price - Strike Price) - Bid
+					profitOrLoss = (price - contract.StrikePrice) - contract.Bid
+				} else {
+					// Loss = -Bid
+					profitOrLoss = -contract.Bid
+				}
+			} else if contract.Type == model.PutOptionType {
+				if price < contract.StrikePrice {
+					// Profit = (Strike Price - Price) - Bid
+					profitOrLoss = (contract.StrikePrice - price) - contract.Bid
+				} else {
+					// Loss = -Bid
+					profitOrLoss = -contract.Bid
+				}
+			}
+
+			// Adjust profit or loss based on long or short position
+			if contract.LongShort == model.Short {
+				profitOrLoss = -profitOrLoss
+			}
+
+			totalProfitLoss += profitOrLoss
+		}
+
+		// Append X & Y values
+		xValues = append(xValues, model.XYValue{X: price, Y: totalProfitLoss})
+
+		// Update maximum profit and maximum loss
+		if totalProfitLoss > maxProfit {
+			maxProfit = totalProfitLoss
+		}
+		if totalProfitLoss < maxLoss {
+			maxLoss = totalProfitLoss
+		}
+
+		// Check for break-even points
+		if equal(totalProfitLoss, 0) {
+			breakEvenPoints = append(breakEvenPoints, price)
+		}
+	}
+
+	return model.AnalysisResult{
+		XYValues:        xValues,
+		MaxProfit:       maxProfit,
+		MaxLoss:         maxLoss,
+		BreakEvenPoints: breakEvenPoints,
+	}, nil
 }
 
-// AnalysisResponse represents the data structure of the analysis result
-type AnalysisResponse struct {
-	XYValues        []XYValue `json:"xy_values"`
-	MaxProfit       float64   `json:"max_profit"`
-	MaxLoss         float64   `json:"max_loss"`
-	BreakEvenPoints []float64 `json:"break_even_points"`
+const epsilon = 1e-9
+
+func equal(a, b float64) bool {
+	return math.Abs(a-b) <= epsilon
 }
 
-// XYValue represents a pair of X and Y values
-type XYValue struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
+func validateOptionsContracts(contracts []model.OptionsContract) error {
+	for _, contract := range contracts {
+		if contract.Type != model.CallOptionType && contract.Type != model.PutOptionType {
+			return model.ErrOptionContractValidation
+		}
+		if contract.LongShort != model.Long && contract.LongShort != model.Short {
+			return model.ErrOptionContractValidation
+		}
 
-func AnalysisHandler(w http.ResponseWriter, r *http.Request) {
-	// Your code here
-}
+		// Validate expiration date
+		if contract.ExpirationDate.Before(time.Now()) {
+			return model.ErrOptionContractValidation
+		}
 
-func calculateXYValues(contracts []OptionsContract) []XYValue {
-	// Your code here
-	return nil
-}
+		// Validate bid and ask prices
+		if contract.Bid < 0 || contract.Ask < 0 || contract.Bid > contract.Ask {
+			return model.ErrOptionContractValidation
+		}
 
-func calculateMaxProfit(contracts []OptionsContract) float64 {
-	// Your code here
-	return 0
-}
+		// Validate strike price
+		if contract.StrikePrice <= 0 {
+			return model.ErrOptionContractValidation
+		}
 
-func calculateMaxLoss(contracts []OptionsContract) float64 {
-	// Your code here
-	return 0
-}
-
-func calculateBreakEvenPoints(contracts []OptionsContract) []float64 {
-	// Your code here
+	}
 	return nil
 }

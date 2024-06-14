@@ -1,17 +1,13 @@
 package main
 
 import (
-	"net/http"
+	"ar/routes"
 	"fmt"
 )
 
 func main() {
-	http.HandleFunc("/analyze", analyzeHandler)
 
-	fmt.Println("Starting server on port 8080")
-	http.ListenAndServe(":8080", nil)
-}
+	fmt.Print("Starting server...\n")
 
-func analyzeHandler(w http.ResponseWriter, r *http.Request) {
-	// Your code here
+	routes.SetupRouter().Run(":8080")
 }
